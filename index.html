@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <link rel="manifest" href="manifest.json">
+    <title>SynthOS</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg: #0a0a0f;
+            --surface: #141420;
+            --accent: #7c3aed;
+            --accent-glow: #a78bfa;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            font-family: 'SF Pro Display', 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100dvh;
+            width: 100dvw;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+        }
+
+        /* Ambient background — the "living" part */
+        .ambient-orbs {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+            will-change: transform;
+        }
+        .orb-1 {
+            width: 300px; height: 300px;
+            background: var(--accent);
+            top: -10%; left: -15%;
+        }
+        .orb-2 {
+            width: 250px; height: 250px;
+            background: #06b6d4;
+            bottom: -8%; right: -12%;
+        }
+        .orb-3 {
+            width: 200px; height: 200px;
+            background: #f43f5e;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Main container */
+        .synthos-shell {
+            position: relative;
+            z-index: 1;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom) 16px;
+        }
+
+        /* Status bar */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 8px;
+            font-size: 13px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        /* The Morphic Canvas — fluid home screen */
+        .morphic-canvas {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            scroll-snap-type: y proximity;
+            padding: 10px 0 40px;
+        }
+        .morphic-canvas::-webkit-scrollbar { display: none; }
+
+        /* SynthCore greeting — adaptive to time */
+        .greeting-block {
+            padding: 20px 8px 10px;
+        }
+        .greeting {
+            font-size: 36px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, var(--text), var(--accent-glow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .synth-hint {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            min-height: 20px;
+            transition: opacity 0.5s;
+        }
+
+        /* Smart Tiles */
+        .smart-tile {
+            background: var(--surface);
+            border-radius: 24px;
+            padding: 18px;
+            margin: 10px 0;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .smart-tile:active {
+            transform: scale(0.97);
+            box-shadow: 0 0 30px rgba(124,58,237,0.15);
+        }
+        .tile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .tile-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+        .tile-content {
+            font-size: 18px;
+            font-weight: 500;
+        }
+        .tile-sub {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Dock */
+        .dock {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 10px 0 6px;
+            flex-shrink: 0;
+            background: rgba(20,20,32,0.6);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border-radius: 28px;
+            margin: 0 8px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .dock-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            transition: transform 0.15s;
+            background: var(--surface);
+        }
+        .dock-icon:active {
+            transform: scale(0.85);
+        }
+
+        /* Predicted cursor — the fluid touch indicator */
+        .predicted-cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+            box-shadow: 0 0 40px var(--accent);
+            transition: opacity 0.15s;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+    <div class="predicted-cursor" id="predictedCursor"></div>
+
+    <div class="synthos-shell">
+        <div class="status-bar">
+            <span id="timeDisplay">12:00</span>
+            <span>🔒 SynthOS</span>
+        </div>
+
+        <div class="morphic-canvas" id="morphicCanvas">
+            <div class="greeting-block">
+                <div class="greeting" id="greeting">Good morning</div>
+                <div class="synth-hint" id="synthHint">You usually check messages now</div>
+            </div>
+
+            <!-- Smart tiles — the Morphic UI widgets -->
+            <div class="smart-tile" onclick="openApp('messages')">
+                <div class="tile-header"><span class="tile-label">SynthCore Suggestion</span><span>→</span></div>
+                <div class="tile-content">💬 Messages</div>
+                <div class="tile-sub">3 unread · 2 from favorites</div>
+            </div>
+            <div class="smart-tile" onclick="openApp('weather')">
+                <div class="tile-header"><span class="tile-label">Ambient</span></div>
+                <div class="tile-content" id="weatherTile">☀️ Loading...</div>
+                <div class="tile-sub">Powered by on‑device sense</div>
+            </div>
+            <div class="smart-tile" onclick="openApp('notes')">
+                <div class="tile-header"><span class="tile-label">Quick Capture</span></div>
+                <div class="tile-content">📝 Tap to jot a thought</div>
+                <div class="tile-sub">Synced locally · zero cloud</div>
+            </div>
+        </div>
+
+        <div class="dock">
+            <div class="dock-icon" onclick="openApp('home')">🏠</div>
+            <div class="dock-icon" onclick="openApp('apps')">⊞</div>
+            <div class="dock-icon" onclick="openApp('synthcore')">◆</div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // SYNTHOS MORPHIC ENGINE — All on‑device, zero telemetry
+        // ============================================================
+
+        // --- Fluid Touch Prediction (Zero‑Friction Pillar) ---
+        let touchX = 0, touchY = 0;
+        let velocityX = 0, velocityY = 0;
+        let lastTouchTime = 0;
+        const cursor = document.getElementById('predictedCursor');
+
+        document.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            const now = performance.now();
+            const dt = (now - lastTouchTime) / 1000 || 0.016;
+
+            velocityX = (touch.clientX - touchX) / dt;
+            velocityY = (touch.clientY - touchY) / dt;
+            touchX = touch.clientX;
+            touchY = touch.clientY;
+            lastTouchTime = now;
+
+            // Predict ahead by 50ms — the fluid advantage
+            const predX = touchX + velocityX * 0.05;
+            const predY = touchY + velocityY * 0.05;
+
+            cursor.style.left = predX + 'px';
+            cursor.style.top = predY + 'px';
+            cursor.style.opacity = '1';
+        });
+
+        document.addEventListener('touchend', () => {
+            cursor.style.opacity = '0';
+        });
+
+        // --- Morphic Ambient Orbs — follow your touch slightly ---
+        const orbs = document.querySelectorAll('.orb');
+        document.addEventListener('touchmove', (e) => {
+            const x = e.touches[0].clientX / window.innerWidth;
+            const y = e.touches[0].clientY / window.innerHeight;
+            orbs[0].style.transform = `translate(${(x-0.5)*30}px, ${(y-0.5)*30}px)`;
+            orbs[1].style.transform = `translate(${(0.5-x)*25}px, ${(0.5-y)*25}px)`;
+            orbs[2].style.transform = `translate(-50%, -50%) translate(${(x-0.5)*40}px, ${(y-0.5)*40}px)`;
+        }, {passive: true});
+
+        // --- Living Theme — greeting adapts to time of day ---
+        function updateGreeting() {
+            const hour = new Date().getHours();
+            const g = document.getElementById('greeting');
+            const hint = document.getElementById('synthHint');
+            
+            if (hour < 6) {
+                g.textContent = 'Good night';
+                hint.textContent = 'Quiet hours active · all notifications silenced';
+                document.documentElement.style.setProperty('--accent', '#312e81');
+                document.documentElement.style.setProperty('--accent-glow', '#6366f1');
+            } else if (hour < 12) {
+                g.textContent = 'Good morning';
+                hint.textContent = 'You usually start with messages';
+                document.documentElement.style.setProperty('--accent', '#7c3aed');
+                document.documentElement.style.setProperty('--accent-glow', '#a78bfa');
+            } else if (hour < 17) {
+                g.textContent = 'Good afternoon';
+                hint.textContent = 'Peak focus time · 2 tasks due';
+                document.documentElement.style.setProperty('--accent', '#0ea5e9');
+                document.documentElement.style.setProperty('--accent-glow', '#38bdf8');
+            } else {
+                g.textContent = 'Good evening';
+                hint.textContent = 'Wind down · music recommended';
+                document.documentElement.style.setProperty('--accent', '#f43f5e');
+                document.documentElement.style.setProperty('--accent-glow', '#fb7185');
+            }
+        }
+
+        // --- SynthCore On‑Device Intelligence ---
+        // Learns your habits locally, stored in localStorage (never leaves device)
+        function learnHabit(action) {
+            let habits = JSON.parse(localStorage.getItem('synthos_habits') || '{}');
+            habits[action] = (habits[action] || 0) + 1;
+            localStorage.setItem('synthos_habits', JSON.stringify(habits));
+            
+            // Update the hint based on learned behavior
+            const mostFrequent = Object.entries(habits).sort((a,b) => b[1]-a[1])[0];
+            if (mostFrequent && mostFrequent[1] > 3) {
+                document.getElementById('synthHint').textContent = 
+                    `SynthCore: you often use ${mostFrequent[0]} at this time`;
+            }
+        }
+
+        function openApp(app) {
+            learnHabit(app);
+            // In a full implementation, this would launch real apps
+            // For now, show the SynthOS app drawer animation
+            console.log('SynthOS launching:', app);
+            // Could integrate with Android intents via a WebView bridge
+        }
+
+        // --- Clock ---
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('timeDisplay').textContent = 
+                now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        }
+
+        // --- Init ---
+        updateGreeting();
+        updateClock();
+        setInterval(updateClock, 10000);
+        setInterval(updateGreeting, 60000);
+
+        // Learn from this launch
+        learnHabit('synthos_launch');
+
+        console.log('◆ SynthOS Morphic Engine active');
+        console.log('◆ All processing on‑device');
+        console.log('◆ Zero data leaves this browser');
+    </script>
+</body>
+</html>
